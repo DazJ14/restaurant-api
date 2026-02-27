@@ -11,7 +11,7 @@ router.post('/pagar', async (req, res) => {
     const client = await pool.connect();
 
     try {
-        let { cuenta_id, metodo_pago, referencia } = req.body;
+        let { cuenta_id, metodo_pago, cliente_nombre } = req.body;
 
         // ---------------------------
         // 🔎 Validaciones básicas
@@ -68,7 +68,7 @@ router.post('/pagar', async (req, res) => {
             `INSERT INTO pagos 
              (cuenta_id, cliente_nombre, metodo_pago, creado_en)
              VALUES ($1, $2, $3, NOW())`,
-            [cuenta_id, cuenta.rows[0].cliente_nombre, metodo_pago]
+            [cuenta_id, cliente_nombre, metodo_pago]
         );
 
         // ---------------------------
