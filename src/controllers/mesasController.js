@@ -4,7 +4,20 @@ const pool = require('../db');
 
 const obtenerMesas = async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM mesas ORDER BY numero ASC');
+    // Hacemos un LEFT JOIN para traer la mesa y, SI TIENE una cuenta abierta, traer su ID
+    const query = `
+      SELECT 
+        m.id, 
+        m.numero, 
+        m.capacidad, 
+        m.estado, 
+        m.mesa_padre_id,
+        c.id AS cuenta_activa_id
+      FROM mesas m
+      LEFT JOIN cuentas c ON m.id = c.mesa_id AND c.estado = 'abierta'
+      ORDER BY m.numero ASC;
+    `;
+    const result = await pool.query(query);
     res.json(result.rows);
   } catch (error) {
     console.error('Error al obtener mesas:', error);
