@@ -28,12 +28,12 @@ app.use(cors({
 }));
 app.use(express.json());
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
-  message: { error: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.' }
-});
-app.use('/api/', limiter);
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, 
+//   max: 100, 
+//   message: { error: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.' }
+// });
+// app.use('/api/', limiter);
 
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/auth', require('./routes/auth'));
