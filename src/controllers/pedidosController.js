@@ -9,13 +9,13 @@ const obtenerMenu = async (req, res) => {
   try {
     const query = `
       SELECT 
-        p.id, 
-        p.nombre, 
-        p.descripcion, 
-        p.precio, 
-        c.nombre as categoria 
-      FROM productos p 
-      JOIN categorias c ON p.categoria_id = c.id 
+        p.id,
+        p.nombre,
+        p.descripcion,
+        p.precio,
+        c.nombre as categoria
+      FROM productos p
+      JOIN categorias c ON p.categoria_id = c.id
       WHERE p.disponible = true
       ORDER BY c.nombre, p.nombre;
     `;
@@ -40,7 +40,6 @@ const abrirCuenta = async (req, res) => {
   try {
     const { mesa_id } = cuentaSchema.parse(req.body);
 
-    // Verificar si ya existe cuenta abierta
     const cuentaExistente = await pool.query(
       `SELECT id FROM cuentas WHERE mesa_id = $1 AND estado = 'abierta'`,
       [mesa_id]
@@ -55,15 +54,13 @@ const abrirCuenta = async (req, res) => {
 
     await pool.query('BEGIN');
 
-    // Crear cuenta
     const nuevaCuenta = await pool.query(
-      `INSERT INTO cuentas (mesa_id, estado) 
-       VALUES ($1, 'abierta') 
+      `INSERT INTO cuentas (mesa_id, estado)
+       VALUES ($1, 'abierta')
        RETURNING id, creada_en`,
       [mesa_id]
     );
 
-    // Marcar mesa ocupada
     await pool.query(
       `UPDATE mesas SET estado = 'ocupada' WHERE id = $1`,
       [mesa_id]
@@ -71,7 +68,6 @@ const abrirCuenta = async (req, res) => {
 
     await pool.query('COMMIT');
 
-    // Emitir evento
     const io = req.app.get('io');
     if (io) {
       io.emit('mesas_actualizadas', {
@@ -117,10 +113,10 @@ const tomarOrden = async (req, res) => {
 
     await pool.query('BEGIN');
 
-    /* 1️⃣ Verificar que la cuenta exista y esté abierta */
+    /* 1️⃣ Verificar cuenta abierta */
     const cuentaRes = await pool.query(
-      `SELECT id, mesa_id 
-       FROM cuentas 
+      `SELECT id, mesa_id
+       FROM cuentas
        WHERE id = $1 AND estado = 'abierta'`,
       [cuenta_id]
     );
@@ -130,13 +126,12 @@ const tomarOrden = async (req, res) => {
       return res.status(400).json({ error: 'Cuenta no válida o cerrada' });
     }
 
-    const mesaId = cuentaRes.rows[0].mesa_id;
-
-    /* 2️⃣ Insertar pedidos */
     const pedidosInsertados = [];
 
+    /* 2️⃣ Insertar cada platillo */
     for (const item of platillos) {
-      // Verificar que el producto exista y esté disponible
+
+      // Verificar producto válido
       const productoRes = await pool.query(
         `SELECT id FROM productos WHERE id = $1 AND disponible = true`,
         [item.producto_id]
@@ -149,35 +144,36 @@ const tomarOrden = async (req, res) => {
         });
       }
 
-      const result = await pool.query(
-        `INSERT INTO pedidos 
-         (cuenta_id, producto_id, cantidad, cliente_nombre, estado)
-         VALUES ($1, $2, $3, $4, 'pendiente')
-         RETURNING id, cuenta_id, producto_id, cantidad, cliente_nombre, estado`,
+      const insertRes = await pool.query(
+        `INSERT INTO pedidos
+         (cuenta_id, producto_id, cantidad, cliente_nombre, estado, creado_en)
+         VALUES ($1, $2, $3, $4, 'pendiente', NOW())
+         RETURNING id, cuenta_id, producto_id, cantidad, cliente_nombre, estado, creado_en`,
         [cuenta_id, item.producto_id, item.cantidad, item.cliente_nombre]
       );
 
-      pedidosInsertados.push(result.rows[0]);
+      pedidosInsertados.push(insertRes.rows[0]);
     }
 
-    /* 3️⃣ Obtener detalles para cocina */
-    const detallesCocina = await pool.query(`
-      SELECT 
-        p.id as pedido_id,
-        prod.nombre as platillo,
-        p.cantidad,
-        p.estado,
-        m.numero as mesa_numero
-      FROM pedidos p
-      JOIN productos prod ON p.producto_id = prod.id
-      JOIN cuentas c ON p.cuenta_id = c.id
-      JOIN mesas m ON c.mesa_id = m.id
-      WHERE p.id = ANY($1::int[])
-    `, [pedidosInsertados.map(p => p.id)]);
+    /* 3️⃣ Obtener datos para cocina */
+    const detallesCocina = await pool.query(
+      `SELECT 
+          p.id as pedido_id,
+          prod.nombre as platillo,
+          p.cantidad,
+          p.estado,
+          m.numero as mesa_numero
+       FROM pedidos p
+       JOIN productos prod ON p.producto_id = prod.id
+       JOIN cuentas c ON p.cuenta_id = c.id
+       JOIN mesas m ON c.mesa_id = m.id
+       WHERE p.id = ANY($1::int[])`,
+      [pedidosInsertados.map(p => p.id)]
+    );
 
     await pool.query('COMMIT');
 
-    /* 4️⃣ Emitir evento solo si hay datos */
+    /* 4️⃣ Emitir evento socket */
     const io = req.app.get('io');
     if (io && detallesCocina.rows.length > 0) {
       io.emit('nueva_orden_cocina', {
