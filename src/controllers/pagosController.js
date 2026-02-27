@@ -111,14 +111,14 @@ const procesarPago = async (req, res) => {
     );
 
     // 4️⃣ Liberar mesa si existe
-    if (mesaPrincipalId) {
-      await pool.query(
-        `UPDATE mesas 
-         SET estado = 'disponible', mesa_padre_id = NULL 
-         WHERE id = $1 OR mesa_padre_id = $1`,
-        [mesaPrincipalId]
-      );
-    }
+if (mesaPrincipalId) {
+  await pool.query(
+    `UPDATE mesas 
+     SET estado = 'disponible', mesa_padre_id = NULL 
+     WHERE id = $1 OR mesa_padre_id = $1`,
+    [mesaPrincipalId]
+  );
+}
 
     await pool.query('COMMIT');
 
