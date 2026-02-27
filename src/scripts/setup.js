@@ -57,7 +57,7 @@ const setupDatabase = async () => {
       CREATE TABLE IF NOT EXISTS productos (
         id SERIAL PRIMARY KEY,
         categoria_id INTEGER REFERENCES categorias(id) ON DELETE SET NULL,
-        nombre VARCHAR(100) NOT NULL,
+        nombre VARCHAR(100) UNIQUE NOT NULL, -- Agregado UNIQUE para evitar duplicados en el seed
         descripcion TEXT,
         precio DECIMAL(10, 2) NOT NULL,
         disponible BOOLEAN DEFAULT TRUE
@@ -91,26 +91,85 @@ const setupDatabase = async () => {
     `;
 
     await pool.query(queryTablas);
-    console.log('✅ Tablas creadas.');
+    console.log('✅ Tablas creadas/verificadas.');
 
+    // --- SEED DE ROLES ---
     await pool.query(`
       INSERT INTO roles (id, nombre) VALUES 
       (1, 'Gerente'), (2, 'Recepcionista'), (3, 'Mesero'), (4, 'Cocinero')
       ON CONFLICT (id) DO NOTHING;
     `);
 
-    const adminUser = 'admin';
-    const adminPass = 'admin123';
-    const saltRounds = 10;
-    const hash = await bcrypt.hash(adminPass, saltRounds);
+    // --- SEED DE USUARIOS ---
+    console.log('⏳ Insertando usuarios de prueba...');
+    const usuariosPrueba = [
+      { nombre: 'Jagua', username: 'jagua', pass: 'admin123', rol: 1 },
+      { nombre: 'Ana', username: 'ana_recepcion', pass: 'ana123', rol: 2 },
+      { nombre: 'Carlos', username: 'carlos_mesero', pass: 'carlos123', rol: 3 },
+      { nombre: 'Roberto', username: 'roberto_chef', pass: 'roberto123', rol: 4 }
+    ];
+
+    for (const u of usuariosPrueba) {
+      const hash = await bcrypt.hash(u.pass, 10);
+      await pool.query(`
+        INSERT INTO usuarios (nombre, username, password_hash, rol_id)
+        VALUES ($1, $2, $3, $4)
+        ON CONFLICT (username) DO NOTHING;
+      `, [u.nombre, u.username, hash, u.rol]);
+    }
+
+    // --- SEED DE MESAS ---
+    console.log('⏳ Configurando el salón...');
+    await pool.query(`
+      INSERT INTO mesas (numero, capacidad, estado) VALUES 
+      (1, 2, 'ocupada'),  -- La dejaremos ocupada para pruebas
+      (2, 2, 'disponible'), 
+      (3, 4, 'disponible'), 
+      (4, 4, 'disponible'), 
+      (5, 6, 'disponible')
+      ON CONFLICT (numero) DO NOTHING;
+    `);
+
+    // --- SEED DE MENÚ ---
+    console.log('⏳ Cocinando el menú...');
+    await pool.query(`
+      INSERT INTO categorias (nombre) VALUES 
+      ('Bebidas'), ('Entradas'), ('Platos Fuertes'), ('Postres')
+      ON CONFLICT (nombre) DO NOTHING;
+    `);
 
     await pool.query(`
-      INSERT INTO usuarios (nombre, username, password_hash, rol_id)
-      VALUES ('Admin', $1, $2, 1)
-      ON CONFLICT (username) DO NOTHING;
-    `, [adminUser, hash]);
+      INSERT INTO productos (categoria_id, nombre, descripcion, precio) VALUES 
+      ((SELECT id FROM categorias WHERE nombre = 'Bebidas'), 'Agua Mineral', '600ml bien fría', 35.00),
+      ((SELECT id FROM categorias WHERE nombre = 'Entradas'), 'Alitas Crujientes', 'Preparadas en air fryer, cero aceite', 120.00),
+      ((SELECT id FROM categorias WHERE nombre = 'Platos Fuertes'), 'Pasta a la Carbonara', 'Receta tradicional italiana', 180.00),
+      ((SELECT id FROM categorias WHERE nombre = 'Platos Fuertes'), 'Pechuga a la Plancha', 'Ideal para cuidar las calorías', 140.00),
+      ((SELECT id FROM categorias WHERE nombre = 'Postres'), 'Tiramisú', 'Con un toque de espresso', 85.00)
+      ON CONFLICT (nombre) DO NOTHING;
+    `);
 
-    console.log(`✅ Roles insertados y usuario '${adminUser}' creado con éxito.`);
+    // --- SEED DE PEDIDOS (Simular que la Mesa 1 ya está comiendo) ---
+    console.log('⏳ Simulando operación en curso...');
+    
+    // Verificamos si ya hay cuentas para no duplicar datos de prueba infinitamente
+    const cuentasCheck = await pool.query('SELECT id FROM cuentas LIMIT 1');
+    
+    if (cuentasCheck.rows.length === 0) {
+      // Abrimos cuenta en la Mesa 1
+      const cuentaRes = await pool.query(`
+        INSERT INTO cuentas (mesa_id) VALUES ((SELECT id FROM mesas WHERE numero = 1)) RETURNING id
+      `);
+      const cuentaId = cuentaRes.rows[0].id;
+
+      // Metemos un par de pedidos a la cocina
+      await pool.query(`
+        INSERT INTO pedidos (cuenta_id, producto_id, cantidad, cliente_nombre) VALUES 
+        ($1, (SELECT id FROM productos WHERE nombre = 'Pasta a la Carbonara'), 1, 'Persona 1'),
+        ($1, (SELECT id FROM productos WHERE nombre = 'Pechuga a la Plancha'), 1, 'Persona 2')
+      `, [cuentaId]);
+    }
+
+    console.log('✅ ¡Setup completado! Base de datos lista para pruebas.');
 
   } catch (error) {
     console.error('❌ Error en el setup:', error);

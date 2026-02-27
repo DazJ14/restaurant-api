@@ -23,16 +23,42 @@ const cuentaSchema = z.object({ mesa_id: z.number().int().positive() });
 const abrirCuenta = async (req, res) => {
   try {
     const { mesa_id } = cuentaSchema.parse(req.body);
-    const cuentaExistente = await pool.query(`SELECT id FROM cuentas WHERE mesa_id = $1 AND estado = 'abierta'`, [mesa_id]);
+    
+    const cuentaExistente = await pool.query(
+      `SELECT id FROM cuentas WHERE mesa_id = $1 AND estado = 'abierta'`, 
+      [mesa_id]
+    );
     
     if (cuentaExistente.rows.length > 0) {
       return res.status(400).json({ error: 'Esta mesa ya tiene una cuenta abierta', cuenta_id: cuentaExistente.rows[0].id });
     }
 
-    const nuevaCuenta = await pool.query(`INSERT INTO cuentas (mesa_id) VALUES ($1) RETURNING id, creada_en`, [mesa_id]);
+    await pool.query('BEGIN');
+
+    const nuevaCuenta = await pool.query(
+      `INSERT INTO cuentas (mesa_id) VALUES ($1) RETURNING id, creada_en`, 
+      [mesa_id]
+    );
+
+    await pool.query(
+      `UPDATE mesas SET estado = 'ocupada' WHERE id = $1`, 
+      [mesa_id]
+    );
+
+    await pool.query('COMMIT');
+
+    const io = req.app.get('io');
+    io.emit('mesas_actualizadas', { 
+      mensaje: `La Mesa ${mesa_id} ha sido ocupada`, 
+      accion: 'ocupacion_individual' 
+    });
+
     res.status(201).json({ mensaje: 'Cuenta abierta exitosamente', cuenta: nuevaCuenta.rows[0] });
+
   } catch (error) {
+    await pool.query('ROLLBACK'); // Deshacemos todo si algo explota
     if (error instanceof z.ZodError) return res.status(400).json({ errores: error.errors });
+    console.error('Error al abrir cuenta:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 };
