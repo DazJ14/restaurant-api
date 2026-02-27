@@ -66,9 +66,9 @@ router.post('/pagar', async (req, res) => {
         // ---------------------------
         await client.query(
             `INSERT INTO pagos 
-             (cuenta_id, metodo_pago, referencia, fecha_pago)
+             (cuenta_id, cliente_nombre, metodo_pago, creado_en)
              VALUES ($1, $2, $3, NOW())`,
-            [cuenta_id, metodo_pago, referencia]
+            [cuenta_id, cuenta.rows[0].cliente_nombre, metodo_pago]
         );
 
         // ---------------------------
