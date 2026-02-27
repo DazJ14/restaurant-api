@@ -13,23 +13,27 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: '*', 
-    methods: ['GET', 'POST']
+    origin: process.env.FRONTEND_URL || 'http://127.0.0.1:5500', 
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 app.set('io', io);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://127.0.0.1:5500',
+  credentials: true
+}));
 app.use(express.json());
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 100, 
-  message: { error: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.' }
-});
-app.use('/api/', limiter);
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, 
+//   max: 100, 
+//   message: { error: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.' }
+// });
+// app.use('/api/', limiter);
 
 app.use('/api/usuarios', require('./routes/usuarios'));
 app.use('/api/auth', require('./routes/auth'));
