@@ -13,15 +13,19 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: '*', 
-    methods: ['GET', 'POST']
+    origin: 'http://127.0.0.1:5500', 
+    methods: ['GET', 'POST'],
+    credentials: true
   }
 });
 
 app.set('io', io);
 
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: "http://127.0.0.1:5500",
+  credentials: true
+}));
 app.use(express.json());
 
 const limiter = rateLimit({
