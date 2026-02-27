@@ -8,7 +8,8 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "node --watch src/index.js",
-    "start": "node src/index.js",
+    "init-db": "node src/scripts/init_db.js && node src/scripts/init_mesas.js && node src/scripts/init_menu_pedidos.js && node src/scripts/init_pagos.js",
+    "start": "npm run init-db && node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
