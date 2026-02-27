@@ -28,7 +28,7 @@ const ordenSchema = z.object({
 router.post('/ordenar', async (req, res) => {
   const { cuenta_id, platillos } = req.body;
 
-  if (!cuenta_id || !platillos || !Array.isArray(platillos) || platillos.length === 0) {
+  if (!cuenta_id || !Array.isArray(platillos) || platillos.length === 0) {
     return res.status(400).json({ error: 'Datos inválidos' });
   }
 
@@ -37,48 +37,60 @@ router.post('/ordenar', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Verificar que la cuenta exista y esté abierta
-    const cuentaResult = await client.query(
+    // 🔎 Verificar cuenta
+    const cuenta = await client.query(
       'SELECT * FROM cuentas WHERE id = $1 AND estado = $2',
       [cuenta_id, 'abierta']
     );
 
-    if (cuentaResult.rows.length === 0) {
+    if (cuenta.rows.length === 0) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Cuenta no válida o cerrada' });
     }
 
-    // Insertar cada platillo
     for (const item of platillos) {
-      const { producto_id, cantidad, cliente_nombre } = item;
+      let { producto_id, cantidad, cliente_nombre } = item;
 
       if (!producto_id || !cantidad) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Platillo inválido' });
       }
 
-      // Verificar que el producto exista
-      const productoResult = await client.query(
-        'SELECT * FROM productos WHERE id = $1',
+      // 🔎 Verificar producto
+      const producto = await client.query(
+        'SELECT id FROM productos WHERE id = $1',
         [producto_id]
       );
 
-      if (productoResult.rows.length === 0) {
+      if (producto.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: `Producto ${producto_id} no existe` });
       }
 
-      // Insertar pedido (incluyendo creado_en por seguridad)
+      // 🔐 Sanitizar texto (evita errores por longitud)
+      cliente_nombre = cliente_nombre
+        ? cliente_nombre.toString().substring(0, 200)
+        : null;
+
+      const estado = 'pendiente';
+
+      console.log("Insertando pedido:", {
+        cuenta_id,
+        producto_id,
+        cantidad,
+        cliente_nombre
+      });
+
       await client.query(
         `INSERT INTO pedidos 
-        (cuenta_id, producto_id, cantidad, cliente_nombre, estado, creado_en)
-        VALUES ($1, $2, $3, $4, $5, NOW())`,
+         (cuenta_id, producto_id, cantidad, cliente_nombre, estado, creado_en)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
         [
           cuenta_id,
           producto_id,
           cantidad,
-          cliente_nombre || null,
-          'pendiente'
+          cliente_nombre,
+          estado
         ]
       );
     }
@@ -89,8 +101,15 @@ router.post('/ordenar', async (req, res) => {
 
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('Error en /ordenar:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
+
+    console.error("❌ ERROR DETALLADO:", error.message);
+    console.error(error.stack);
+
+    res.status(500).json({
+      error: "Error interno del servidor",
+      detalle: error.message
+    });
+
   } finally {
     client.release();
   }
